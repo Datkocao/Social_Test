@@ -1,0 +1,164 @@
+@model TesterVm
+@{
+    ViewData["Title"] = "API Tester";
+    var presets = Presets.All;
+}
+
+<h2>SocialApp API Tester</h2>
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <p><b>@Model.Notice</b></p>
+}
+
+<hr />
+<h3>1. Tài khoản test</h3>
+
+@foreach (var s in new[] { "A", "B" })
+{
+    <fieldset>
+        <legend>Tài khoản @s — @(Model.Who[s] != null ? "ĐÃ ĐĂNG NHẬP: " + Model.Who[s] : "chưa đăng nhập")</legend>
+
+        <details>
+            <summary>Đăng nhập</summary>
+            <form asp-action="Login" method="post">
+                <input type="hidden" name="slot" value="@s" />
+                Email: <input name="email" /> Mật khẩu: <input name="password" type="password" />
+                <button>Đăng nhập</button>
+            </form>
+        </details>
+
+        <details>
+            <summary>Đăng ký</summary>
+            <form asp-action="Register" method="post">
+                <input type="hidden" name="slot" value="@s" />
+                Username: <input name="username" /><br />
+                Email: <input name="email" /><br />
+                Họ tên: <input name="fullName" /><br />
+                Mật khẩu: <input name="password" type="password" /><br />
+                Nhập lại: <input name="confirmPassword" type="password" /><br />
+                <button>Đăng ký</button>
+            </form>
+        </details>
+
+        <details>
+            <summary>Đăng nhập Google (dán idToken)</summary>
+            <form asp-action="Google" method="post">
+                <input type="hidden" name="slot" value="@s" />
+                idToken: <input name="idToken" size="60" />
+                <button>Google login</button>
+            </form>
+        </details>
+
+        <form asp-action="Refresh" method="post" style="display:inline">
+            <input type="hidden" name="slot" value="@s" />
+            <button>Refresh token</button>
+        </form>
+        <form asp-action="Logout" method="post" style="display:inline">
+            <input type="hidden" name="slot" value="@s" />
+            <button>Xoá token</button>
+        </form>
+    </fieldset>
+}
+
+<hr />
+<h3>1b. Đăng nhập bằng Google</h3>
+<form id="gform" asp-action="Google" method="post">
+    Lưu token vào tài khoản:
+    <select name="slot">
+        <option value="A" selected="@(Model.Slot == "A")">A</option>
+        <option value="B" selected="@(Model.Slot == "B")">B</option>
+    </select>
+    <input type="hidden" name="idToken" id="idToken" />
+</form>
+<div id="gbtn"></div>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+    window.onload = function () {
+        if (typeof google === 'undefined') { document.getElementById('gbtn').textContent = 'Không tải được Google Sign-In'; return; }
+        google.accounts.id.initialize({
+            client_id: '@Model.GoogleClientId',
+            callback: function (r) { document.getElementById('idToken').value = r.credential; document.getElementById('gform').submit(); }
+        });
+        google.accounts.id.renderButton(document.getElementById('gbtn'), { theme: 'outline', size: 'large' });
+    };
+</script>
+
+<hr />
+<h3>2. Gửi request</h3>
+
+<form method="get" asp-action="Index">
+    Mẫu có sẵn:
+    <select name="preset">
+        @foreach (var g in presets.Select((p, i) => (p, i)).GroupBy(x => x.p.Group))
+        {
+            <optgroup label="@g.Key">
+                @foreach (var x in g)
+                {
+                    <option value="@x.i">@x.p.Method @x.p.Name</option>
+                }
+            </optgroup>
+        }
+    </select>
+    Tài khoản:
+    <select name="slot">
+        <option value="A" selected="@(Model.Slot == "A")">A</option>
+        <option value="B" selected="@(Model.Slot == "B")">B</option>
+    </select>
+    <button>Nạp mẫu</button>
+</form>
+
+<br />
+<form asp-action="Send" method="post" enctype="multipart/form-data">
+    Tài khoản gửi:
+    <select name="slot">
+        <option value="A" selected="@(Model.Slot == "A")">A</option>
+        <option value="B" selected="@(Model.Slot == "B")">B</option>
+    </select>
+    <label><input type="checkbox" name="noAuth" value="true" checked="@Model.NoAuth" /> Không gửi token (test 401)</label>
+    <br /><br />
+    Method:
+    <select name="method">
+        @foreach (var m in new[] { "GET", "POST", "PUT", "PATCH", "DELETE" })
+        {
+            <option value="@m" selected="@(Model.Method == m)">@m</option>
+        }
+    </select>
+    Path: <input name="path" size="70" value="@Model.Path" />
+    <br /><br />
+    Kiểu body:
+    <select name="kind">
+        <option value="none" selected="@(Model.Kind == "none")">Không có body</option>
+        <option value="json" selected="@(Model.Kind == "json")">JSON</option>
+        <option value="form" selected="@(Model.Kind == "form")">Form-data (mỗi dòng key=value)</option>
+    </select>
+    <br />
+    <textarea name="body" rows="8" cols="90">@Model.Body</textarea>
+    <br />
+    File - tên field: <input name="fileField" value="@Model.FileField" size="14" />
+    <input type="file" name="files" multiple />
+    <br /><br />
+    <button>Gửi</button>
+</form>
+
+@if (Model.Result != null)
+{
+    <hr />
+    <h3>3. Kết quả</h3>
+    <p>
+        <b>@Model.Result.Request</b><br />
+        Status: <b>@Model.Result.Status @Model.Result.Reason</b> — @Model.Result.Ms ms
+    </p>
+    <pre>@Model.Result.Body</pre>
+}
+
+<hr />
+<h3>4. Id response</h3>
+@if (Model.Ids.Count == 0)
+{
+    <p>(chưa có)</p>
+}
+else
+{
+    <form asp-action="ClearIds" method="post"><button>Xoá danh sách</button></form>
+    <pre>@string.Join("\n", Model.Ids)</pre>
+}
